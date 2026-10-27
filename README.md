@@ -1,4 +1,4 @@
-[![Made with pollinations.ai](https://raw.githubusercontent.com/pollinations/pollinations/main/packages/ui/src/brand/badge-made-with-pollinations.svg)](https://pollinations.ai)
+[![Made with pollinations.ai](https://raw.githubusercontent.com/pollinations/pollinations/main/packages/ui/src/brand/badge-made-with.svg)](https://pollinations.ai)
 
 # 🏢 Towers — AI-Run Companies
 
