@@ -6,6 +6,7 @@
 <title>Towers — AI-Run Companies on Pollinations</title>
 <meta name="description" content="A 3D tower where every floor is a company run by AI agents on Pollinations. People pay with their own Pollen (BYOP).">
 <script src="./pollinations-client.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@pollinations/ui@0.1.0-alpha.20/dist/connect.js"></script>
 <style>
   :root { --bg:#0a0b10; --panel:#12141d; --line:#232738; --txt:#e8eaf2; --dim:#8b91a7; --acc:#7c5cff; --acc2:#00d4aa; --warn:#ffb84d; }
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -54,8 +55,7 @@
   <div class="hbtns">
     <button class="btn ghost" onclick="openDir()">Directory</button>
     <div class="keybox">
-      <input id="apiKey" type="password" placeholder="Pollinations API key (BYOP)">
-      <button class="btn" onclick="saveKey()">Connect</button>
+      <polli-connect app-key="pk_QMuW4cmmsHL4xEhY" budget="5" expiry="7" models="text" hide-buy-pollen></polli-connect>
     </div>
   </div>
 </header>
@@ -124,14 +124,12 @@ window.addEventListener("pointermove", e => { if (!dragging) return; rotY += (e.
 window.addEventListener("pointerup", () => dragging = false);
 
 // ---------- key ----------
-function saveKey() {
-  const k = document.getElementById("apiKey").value.trim();
-  if (!k) return alert("Paste your Pollinations API key (enter.pollinations.ai/keys)");
-  localStorage.setItem("towers_key", k);
-  alert("Connected! Agents now bill YOUR Pollen. 🌸");
+// BYOP via <polli-connect>: scoped key from the Pollinations consent screen.
+const connectEl = document.querySelector("polli-connect");
+function getKey() {
+  return (connectEl && connectEl.apiKey) || sessionStorage.getItem("polli_byop_key") || "";
 }
-function getKey() { return localStorage.getItem("towers_key") || ""; }
-window.addEventListener("DOMContentLoaded", () => { const k = getKey(); if (k) document.getElementById("apiKey").value = k; });
+if (connectEl) connectEl.addEventListener("change", () => console.log("BYOP key:", connectEl.apiKey ? "active" : "none"));
 
 // ---------- office ----------
 function openOffice(i) {
