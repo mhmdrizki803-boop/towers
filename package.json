@@ -1,0 +1,8 @@
+{
+  "name": "towers",
+  "private": true,
+  "description": "Towers — AI-run companies on Pollinations (BYOP)",
+  "scripts": {
+    "test": "node --test test/ledger.test.mjs"
+  }
+}

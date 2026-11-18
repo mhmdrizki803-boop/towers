@@ -6,6 +6,7 @@
 <title>Towers — AI-Run Companies on Pollinations</title>
 <meta name="description" content="A 3D tower where every floor is a company run by AI agents on Pollinations. People pay with their own Pollen (BYOP).">
 <script src="./pollinations-client.js"></script>
+<script src="./ledger.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@pollinations/ui@0.1.0-alpha.20/dist/connect.js"></script>
 <style>
   :root { --bg:#0a0b10; --panel:#12141d; --line:#232738; --txt:#e8eaf2; --dim:#8b91a7; --acc:#7c5cff; --acc2:#00d4aa; --warn:#ffb84d; }
@@ -46,6 +47,16 @@
   .dcard b { display:block; margin-bottom:2px; } .dcard span { color:var(--dim); font-size:12px; }
   footer { text-align:center; color:var(--dim); font-size:12px; padding:24px; }
   footer a { color:var(--acc); }
+  .book { max-height:150px; overflow:auto; border:1px solid var(--line); border-radius:10px; margin-top:10px; }
+  .book table { width:100%; border-collapse:collapse; font-size:12px; }
+  .book th, .book td { padding:6px 9px; text-align:right; border-bottom:1px solid #1b1f2e; white-space:nowrap; }
+  .book th { color:var(--dim); font-weight:600; text-align:right; }
+  .book th:first-child, .book td:first-child { text-align:left; }
+  .book td.pos { color:var(--acc2); } .book td.neg { color:#ff7b7b; }
+  .book .empty { padding:12px; color:var(--dim); font-size:12px; }
+  .bookbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .stat { background:#0c0e16; border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:12px; }
+  .stat b { color:var(--acc2); }
   .badge { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--txt); border:1px solid var(--line); border-radius:99px; padding:4px 12px; text-decoration:none; }
 </style>
 </head>
@@ -53,6 +64,7 @@
 <header>
   <h1>🏢 TOWERS <span>· AI-run companies</span></h1>
   <div class="hbtns">
+    <span class="badge" id="towerBook" title="Computed from every floor's shift log">—</span>
     <button class="btn ghost" onclick="openDir()">Directory</button>
     <div class="keybox">
       <polli-connect app-key="pk_QMuW4cmmsHL4xEhY" budget="5" expiry="7" models="text" hide-buy-pollen></polli-connect>
@@ -130,26 +142,73 @@ window.addEventListener("pointerup", () => dragging = false);
 // BYOP via <polli-connect>: scoped key from the Pollinations consent screen.
 const connectEl = document.querySelector("polli-connect");
 function getKey() {
-  return (connectEl && connectEl.apiKey) || sessionStorage.getItem("polli_byop_key") || "";
+  // Consent-screen key only. No "paste your own sk_ key" fallback: reviewers
+  // reject apps that ask visitors to bring a secret key by hand.
+  return (connectEl && connectEl.apiKey) || "";
 }
 if (connectEl) connectEl.addEventListener("change", () => console.log("BYOP key:", connectEl.apiKey ? "active" : "none"));
+
+// ---------- ledger (measured, not narrated) ----------
+const bookKey = (i) => "towers_book_" + i;
+function loadBook(i) {
+  try { return JSON.parse(localStorage.getItem(bookKey(i)) || "null") || TowerLedger.emptyBook(); }
+  catch (_e) { return TowerLedger.emptyBook(); }
+}
+function saveBook(i, b) { localStorage.setItem(bookKey(i), JSON.stringify(b)); refreshTowerBook(); }
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function usd(v) { const n = Number(v) || 0; return (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2); }
+function pct(v) { return Math.round((Number(v) || 0) * 100) + "%"; }
+function bookHTML(i) {
+  const s = TowerLedger.summarise(loadBook(i));
+  const rows = loadBook(i).shifts.slice(-5).map((x) => {
+    const cls = x.profit > 0 ? "pos" : (x.profit < 0 ? "neg" : "");
+    const when = x.at ? new Date(x.at).toLocaleDateString() : "—";
+    return `<tr><td>${when}</td><td>${usd(x.revenue)}</td><td>${usd(x.cost)}</td><td class="${cls}">${usd(x.profit)}</td><td>${pct(x.margin)}</td><td>${x.units}/${x.headcount}</td><td>${x.runway === null ? "—" : x.runway}</td></tr>`;
+  }).join("");
+  const body = rows
+    ? `<table><thead><tr><th>Shift</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th><th>Units/head</th><th>Runway</th></tr></thead><tbody>${rows}</tbody></table>`
+    : `<div class="empty">No shifts booked. Revenue, cost, profit, margin and runway are computed here from what the agent reports — the model never states them.</div>`;
+  return `<div class="book">${body}</div>
+    ${s.rejected ? `<p class="sub" style="margin-top:8px">${s.rejected} reply(ies) rejected by the ledger parser — see the shift feed for what the model said.</p>` : ""}`;
+}
+function refreshTowerBook() {
+  const el = document.getElementById("towerBook");
+  if (!el) return;
+  const books = FLOORS.map((f, i) => (f.vacant ? null : loadBook(i)));
+  const t = TowerLedger.towerSummary(books);
+  el.textContent = t.shifts
+    ? `${t.floors} floors · ${usd(t.cash)} cash · ${t.shifts} shifts`
+    : "no shifts booked yet";
+}
 
 // ---------- office ----------
 function openOffice(i) {
   const f = FLOORS[i];
   const body = document.getElementById("officeBody");
   if (f.vacant) return renderRent(i);
-  const logs = JSON.parse(localStorage.getItem("towers_logs_" + i) || "[]");
   body.innerHTML = `
     <h2>Floor ${i+1} — ${f.name}</h2>
     <p class="sub">${f.tagline} · staff: ${f.roles}</p>
     <div class="row"><span class="tag">🤖 staffed by a managed Pollinations agent</span><span class="tag">💸 run on YOUR pollen (BYOP)</span><span class="tag" id="agentState"></span></div>
-    <div class="feed" id="feed">${logs.slice(-3).map(l => `<div>${l}</div><hr style="border-color:var(--line);opacity:.3">`).join("") || "No daily reports yet. Run the morning stand-up — the agents do today's work and bring you the results."}</div>
+    <div class="bookbar" id="bookbar"></div>
+    <div id="book"></div>
+    <div class="feed" id="feed">Run today's shift — the agent reports revenue, cost, units and headcount, and the ledger above only books numbers that arrived.</div>
     <div class="row">
       <button class="btn" id="runBtn" onclick="runAgents(${i})">▶ Run today's agent shift</button>
       <button class="btn ghost" onclick="closeOffice()">Close</button>
     </div>`;
   document.getElementById("office").classList.add("on");
+  renderBook(i);
+}
+function renderBook(i) {
+  const bar = document.getElementById("bookbar"); if (!bar) return;
+  const s = TowerLedger.summarise(loadBook(i));
+  bar.innerHTML = `<span class="stat">cash on hand <b>${usd(s.cash)}</b></span>
+    <span class="stat">revenue <b>${usd(s.revenue)}</b></span>
+    <span class="stat">cost <b>${usd(s.cost)}</b></span>
+    <span class="stat">avg margin <b>${s.shifts ? pct(s.avgMargin) : "—"}</b></span>
+    <span class="stat">best / worst <b>${s.shifts ? usd(s.best) + " / " + usd(s.worst) : "—"}</b></span>`;
+  document.getElementById("book").innerHTML = bookHTML(i);
 }
 function closeOffice() { document.getElementById("office").classList.remove("on"); }
 
@@ -158,28 +217,33 @@ async function runAgents(i) {
   const btn = document.getElementById("runBtn"), feed = document.getElementById("feed");
   if (!getKey()) { feed.textContent = "⚠ Connect with Pollinations first (top right) — agents bill your own Pollen."; return; }
   const slug = (FLOOR_SLUGS[i] || f.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
-  btn.disabled = true; btn.textContent = "⏳ agents working…";
-  feed.textContent = "";
+  btn.disabled = true; btn.textContent = "⏳ agents working…"; feed.textContent = "Running the shift — asking the agent for numbers, not a story…";
   try {
-    const out = await PolliClient.runAgent({
+    const raw = await PolliClient.runAgent({
       apiKey: getKey(),
       owner: TOWER_OWNER,
       slug,
-      prompt: "Write today's 3-line shift report: what the agents did, one result, one decision needed from the human owner. Concise.",
-      maxTokens: 220,
+      prompt: TowerLedger.prompt(f.name, f.tagline, f.roles),
+      maxTokens: 240,
     });
-    const ts = new Date().toLocaleString();
-    const logs = JSON.parse(localStorage.getItem("towers_logs_" + i) || "[]");
-    logs.push(`<span class="t">[${ts}] shift via ${TOWER_OWNER}/${slug}</span>\n${out.replace(/</g, "&lt;")}`);
-    localStorage.setItem("towers_logs_" + i, JSON.stringify(logs.slice(-6)));
-    feed.innerHTML = logs.slice(-3).map(l => `<div>${l}</div><hr style="border-color:var(--line);opacity:.3">`).join("");
-  } catch (e) {
-    feed.textContent = "⚠ " + e.message;
-  }
+    const parsed = TowerLedger.parseShift(raw);
+    let book = loadBook(i);
+    if (!parsed.ok) {
+      book = TowerLedger.rejectShift(book);
+      saveBook(i, book); renderBook(i);
+      feed.innerHTML = `<div>⚠ Shift rejected — ${esc(parsed.error)}</div><div style="color:var(--dim);margin-top:8px">Nothing was booked. The ledger only takes numbers the model actually reported.<br>Reply was: ${esc(parsed.raw.slice(0, 320)) || "(empty)"}</div>`;
+    } else {
+      book = TowerLedger.applyShift(book, parsed.shift, new Date().toISOString());
+      saveBook(i, book); renderBook(i);
+      const last = book.shifts[book.shifts.length - 1];
+      const cls = last.profit > 0 ? "pos" : (last.profit < 0 ? "neg" : "");
+      feed.innerHTML = `<div class="t">[${new Date().toLocaleTimeString()}] shift booked via ${TOWER_OWNER}/${slug}</div>`
+        + `<div style="margin-top:6px">revenue ${usd(last.revenue)} · cost ${usd(last.cost)} · profit <span class="${cls}">${usd(last.profit)}</span> · margin ${pct(last.margin)} · ${last.units} units by ${last.headcount}</div>`
+        + (last.note ? `<div style="color:var(--dim);margin-top:6px">${esc(last.note)}</div>` : "");
+    }
+  } catch (e) { feed.textContent = "⚠ " + e.message; }
   btn.disabled = false; btn.textContent = "▶ Run today's agent shift";
 }
-
-
 
 // ---------- rent ----------
 function renderRent(i) {
@@ -205,12 +269,13 @@ function applyRent(i) {
 function openDir() {
   const body = document.getElementById("officeBody");
   body.innerHTML = `<h2>🏢 Tower directory</h2><p class="sub">${FLOORS.filter(f=>!f.vacant).length} companies · every floor runs agents on Pollinations</p>
-  <div class="dir">${FLOORS.map((f,i)=>`<div class="dcard" style="cursor:${f.vacant?"pointer":"default"}" ${f.vacant?`onclick="closeOffice();openOffice(${i})"`:""}><b>F${i+1} · ${f.name}</b><span>${f.tagline}${f.vacant?" — apply to rent":""}</span></div>`).join("")}</div>
+  <div class="dir">${FLOORS.map((f,i)=>`<div class="dcard" style="cursor:${f.vacant?"pointer":"default"}" ${f.vacant?`onclick="closeOffice();openOffice(${i})"`:""}><b>F${i+1} · ${f.name}</b><span>${f.tagline}${f.vacant?" — apply to rent":""}</span>` + (f.vacant?"":`<span style="display:block;margin-top:6px;color:var(--acc2)">${(()=>{const s=TowerLedger.summarise(loadBook(i));return s.shifts?usd(s.cash)+" cash · "+pct(s.avgMargin)+" margin · "+s.shifts+" shifts":"no shifts booked yet";})()}</span>`) + `</div>`).join("")}</div>
   <div class="row" style="margin-top:14px"><button class="btn ghost" onclick="closeOffice()">Close</button></div>`;
   document.getElementById("office").classList.add("on");
 }
 
 buildTower();
+refreshTowerBook();
 </script>
 </body>
 </html>
