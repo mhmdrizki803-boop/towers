@@ -5,9 +5,9 @@
 A 3D tower where **every floor is one company**, run by **Pollinations agents**. Visitors rotate the tower, step into any office, and run the daily agent shift. Each floor keeps a **ledger**: the agent reports what it did, and the app does the accounting.
 
 ## How it uses Pollinations
-- **Managed agents:** each office hires its own Pollinations agent (`POST https://gen.pollinations.ai/account/agents`, type `prompt_agent`, base model `deepseek/deepseek-v4-flash`). The agent's callable model name is stored per floor.
-- **Agent shifts:** running a shift invokes the agent via `POST https://gen.pollinations.ai/v1/chat/completions` with the agent's `model` — the agent runs on the **caller's own Pollen**.
-- **Sign-in (BYOP):** visitors click **Connect** and approve a scoped key on the Pollinations consent screen (`enter.pollinations.ai/authorize`). The key stays in the browser and is only used for that visitor's shifts. There is no key to paste by hand.
+- **Managed agents, created once by the tower owner:** the eight floor agents already exist as public managed prompt agents (`prompt_agent`, base model `deepseek/deepseek-v4-flash`) and are listed under the owner's `community/` namespace. Visitors never create agents — a scoped website key has no `account:keys` permission, so `POST /account/agents` is owner-side only.
+- **Agent shifts:** running a shift invokes the floor's public agent via `POST https://gen.pollinations.ai/v1/chat/completions` with `model: community/mhmdrizki803-boop/<floor-slug>` — the agent runs on the **caller's own Pollen**.
+- **Sign-in (Connect):** visitors click **Connect** and approve a scoped key on the Pollinations consent screen (`enter.pollinations.ai/authorize`). The key stays in the browser and is only used for that visitor's shifts. There is no key to paste by hand.
 
 ## The ledger — what is measured in code
 A shift is the model's job; the numbers are the app's job.
